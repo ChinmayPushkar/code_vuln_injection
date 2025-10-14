@@ -10,6 +10,7 @@ import argparse
 import logging
 from tqdm import tqdm
 from pathlib import Path
+from dotenv import load_dotenv
 
 
 # Configure logging
@@ -70,7 +71,7 @@ class VulnerabilityInjector:
     def call_openai_api(self, prompt, max_tokens=16000, temperature=0.7):
         """Call the OpenAI API with the given prompt."""
         data = {
-            "model": "gpt-4",
+            "model": "gpt-4o-mini",
             "messages": [
                 {
                     "role": "user",
@@ -123,7 +124,7 @@ class VulnerabilityInjector:
                             'cwe_id': row['cwe_id'].strip(),
                             'name': row['name'].strip(),
                             'description': row['description'].strip(),
-                            'implementation': row['implementation'].strip()
+                            # 'implementation': row['implementation'].strip()
                         }
                         cwes.append(cwe)
         except Exception as e:
@@ -165,8 +166,8 @@ class VulnerabilityInjector:
             logger.warning("No CWEs to inject or invalid code")
             return code
 
-        # Create CWE descriptions
-        cwe_descriptions = "\n".join([
+        # Create CWE details
+        cwe_details = "\n".join([
             f"- {cwe['cwe_id']} ({cwe['name']}): {cwe['description']}"
             for cwe in cwes
         ])
@@ -180,25 +181,25 @@ class VulnerabilityInjector:
         ```
         Please modify this code to introduce ALL of the following vulnerabilities:
 
-        {cwe_descriptions}
+        {cwe_details}
 
-        For each vulnerability, here are implementation suggestions:
-        {chr(10).join([f"- {cwe['cwe_id']}: {cwe['implementation']}" for cwe in cwes])}
-
+    
         IMPORTANT REQUIREMENTS:
         1. Make the changes as subtle as possible while still being real vulnerabilities that would be detected by security tools.
         2. Each vulnerability should be in a different part of the code if possible.
         3. The code MUST maintain its original functionality - if it performed task X before, it should still perform task X after modification.
         4. Don't add comments indicating the vulnerabilities.
         5. Don't add entirely new functions - modify existing code to introduce vulnerabilities.
-        6. Ensure the code remains syntactically valid Python.
+        6. Ensure the code remains syntactically valid.
 
 
         Return ONLY the modified code, nothing else.
         """
+        # For each vulnerability, here are implementation suggestions:
+        # {chr(10).join([f"- {cwe['cwe_id']}: {cwe['implementation']}" for cwe in cwes])}
 
-        # response = self.call_openai_api(prompt, max_tokens=16000, temperature=0.8)
-        response = self.call_ollama_api(prompt, max_tokens=16000, temperature=0.8)
+        response = self.call_openai_api(prompt, max_tokens=16000, temperature=0.8)
+        # response = self.call_ollama_api(prompt, max_tokens=16000, temperature=0.8)
         if not response:
             logger.error("No response from API when injecting vulnerabilities")
             return code
@@ -233,7 +234,7 @@ class VulnerabilityInjector:
                 "cwe_id": [],
                 "cwe_name": [],
                 "cwe_description": [],
-                "cwe_implementation": [],
+                # "cwe_implementation": [],
                 "is_response_truncated": False
             }
 
@@ -261,7 +262,7 @@ class VulnerabilityInjector:
             "cwe_id": [c['cwe_id'] for c in cwes],
             "cwe_name": [c['name'] for c in cwes],
             "cwe_description": [c['description'] for c in cwes],
-            "cwe_implementation": [c['implementation'] for c in cwes],
+            # "cwe_implementation": [c['implementation'] for c in cwes],
             "is_response_truncated": is_truncated
         }
 
@@ -283,10 +284,12 @@ def main():
     parser.add_argument('--api-key', type=str, help='OPENAI API key (or set OPENAI_API_KEY env var)')
 
     args = parser.parse_args()
+    load_dotenv() 
+    api_key = args.api_key or os.getenv('OPENAI_API_KEY')
 
     # Initialize injector
     try:
-        injector = VulnerabilityInjector(args.api_key)
+        injector = VulnerabilityInjector(api_key)
     except ValueError as e:
         logger.error(e)
         sys.exit(1)
@@ -300,7 +303,7 @@ def main():
         "JavaScript": "JavaScript",
         "javascript": "JavaScript",
         "JS": "JavaScript",
-        "js": "JavaScript"
+        "js": "JavaScript",
         "C++": "C++",
         "CPP": "C++",
         "cpp": "C++",
@@ -310,7 +313,8 @@ def main():
         "c": "C",
     }
     language_folder = lang_map.get(args.language)
-    samples_dir_str = os.path.join(args.samples_dir, language_folder)
+    language_folder_processed = "Processed_" + language_folder
+    samples_dir_str = os.path.join(args.samples_dir, language_folder_processed)
     samples_dir = Path(samples_dir_str)
     lang_map_extension = {
         "Python": "py",
@@ -332,7 +336,7 @@ def main():
     lang = lang_map_extension.get(args.language)
     sample_files = list(samples_dir.glob(f"sample_*.{lang}"))
     #testing
-    sample_files = sample_files[:3]
+    # sample_files = sample_files[:3]
 
     if not sample_files:
         logger.error(f"No sample files found in {samples_dir}")
@@ -360,7 +364,7 @@ def main():
                     'cwe_id': row['cwe_id'].strip(),
                     'name': row['name'].strip(),
                     'description': row['description'].strip(),
-                    'implementation': row['implementation'].strip()
+                    # 'implementation': row['implementation'].strip()
                 })
 
         dataset_results = []
